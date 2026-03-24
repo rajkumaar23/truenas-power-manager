@@ -1,4 +1,4 @@
-# truenas-power-manager
+# TrueNAS Power Manager
 
 Keeps a backup TrueNAS server off when it doesn't need to be running. It powers the machine on before the nightly backup window and shuts it down gracefully once replication finishes — without ever cutting off a transfer mid-way.
 
@@ -100,7 +100,13 @@ networks:
           gateway: 192.168.1.1
 ```
 
-Also set an unused IP on your LAN for the WireGuard container under `wireguard.networks.lan.ipv4_address`, and set a unique `mac_address` in the `02:xx` range so your router registers it as a distinct client.
+Also set an unused IP on your LAN for the WireGuard container under `wireguard.networks.lan.ipv4_address`.
+
+Docker automatically generates a unique MAC address for the container. If you want to register it as a static client in your router with a stable, predictable MAC, you can pin one in the `02:xx` locally-administered range:
+
+```yaml
+mac_address: "02:42:00:00:00:01"  # optional — change last octets to anything unused
+```
 
 ### 4. Start
 
@@ -108,11 +114,12 @@ Also set an unused IP on your LAN for the WireGuard container under `wireguard.n
 docker compose up -d
 ```
 
-The compose file starts three containers:
+The compose file starts two containers:
 
 - **wireguard** — establishes the WireGuard tunnel to the backup network; provides the network namespace that the power-manager shares
 - **truenas-power-manager** — runs `sleep infinity` as a long-lived host for Ofelia to exec into; reaches the source LAN via the macvlan interface and IPMI via the WireGuard tunnel
-- **ofelia** — the scheduler; reads the cron schedule from Docker labels
+
+Ofelia runs as a separate singleton — see below.
 
 Default schedule (edit the labels in `docker-compose.yml` to change):
 
@@ -120,6 +127,16 @@ Default schedule (edit the labels in `docker-compose.yml` to change):
 22:00  →  -power-on
 02:00  →  -power-off  (retries each minute until the backup is done)
 ```
+
+### Ofelia
+
+Ofelia is kept in a separate compose file so one instance can schedule jobs across multiple projects. Start it once on the host:
+
+```bash
+docker compose -f docker-compose.ofelia.yml up -d
+```
+
+Ofelia discovers containers to schedule by watching Docker labels. The `ofelia.enabled: "true"` label on `truenas-power-manager` opts it in, and the `ofelia.job-exec.*` labels define the jobs.
 
 ### Running commands manually
 
@@ -133,7 +150,7 @@ docker exec truenas-power-manager truenas-power-manager -force-off
 ## Building from source
 
 ```bash
-go build -o truenas-power-manager .
+go build -o truenas-power-manager ./cmd/truenas-power-manager/
 ```
 
 Requires Go 1.25+.

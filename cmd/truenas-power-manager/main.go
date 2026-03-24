@@ -4,6 +4,10 @@ import (
 	"flag"
 	"fmt"
 	"os"
+
+	"truenas-power-manager/internal/config"
+	"truenas-power-manager/internal/ipmi"
+	"truenas-power-manager/internal/truenas"
 )
 
 const usage = `truenas-power-manager — control backup TrueNAS power via IPMI
@@ -33,18 +37,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	cfg, err := loadConfig()
+	cfg, err := config.Load()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "configuration error: %v\n", err)
 		os.Exit(1)
 	}
 
-	ipmi := newIPMIController(cfg.IPMI)
-	checker := newBackupChecker(cfg.TrueNAS)
+	ctrl := ipmi.New(cfg.IPMI)
+	checker := truenas.New(cfg.TrueNAS)
 
 	switch {
 	case *status:
-		state, err := ipmi.Status()
+		state, err := ctrl.Status()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
@@ -64,7 +68,7 @@ func main() {
 		}
 
 	case *powerOn:
-		if err := ipmi.PowerOn(); err != nil {
+		if err := ctrl.PowerOn(); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
@@ -80,14 +84,14 @@ func main() {
 			fmt.Fprintln(os.Stderr, "Backup is still running — power-off aborted.")
 			os.Exit(1)
 		}
-		if err := ipmi.PowerOff(); err != nil {
+		if err := ctrl.PowerOff(); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
 		fmt.Println("Power-off command sent.")
 
 	case *forceOff:
-		if err := ipmi.PowerOff(); err != nil {
+		if err := ctrl.PowerOff(); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}

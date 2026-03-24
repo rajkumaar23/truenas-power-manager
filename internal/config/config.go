@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"fmt"
@@ -28,7 +28,7 @@ type TrueNASConfig struct {
 	KeyFile  string
 }
 
-// loadConfig reads configuration from environment variables.
+// Load reads configuration from environment variables.
 //
 // Required:
 //
@@ -38,7 +38,7 @@ type TrueNASConfig struct {
 // Optional (defaults shown):
 //
 //	IPMI_PRIVILEGE=ADMINISTRATOR, TRUENAS_PORT=22
-func loadConfig() (*Config, error) {
+func Load() (*Config, error) {
 	godotenv.Load() // no-op if .env is absent; real env vars take precedence
 	cfg := &Config{
 		IPMI: IPMIConfig{

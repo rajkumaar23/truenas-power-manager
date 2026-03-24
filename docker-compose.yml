@@ -13,10 +13,11 @@ services:
       - /lib/modules:/lib/modules:ro
     networks:
       lan:
-        # A real IP on your LAN so the container can reach other LAN machines
-        # (e.g. source TrueNAS) directly, without host networking.
         # Pick any unused IP in your LAN subnet.
         ipv4_address: 192.168.1.99
+    # Optional: pin a MAC address for stable router registration.
+    # Docker auto-generates one if omitted. Use the 02:xx locally-administered range.
+    # mac_address: "02:42:00:00:00:01"
 
   truenas-power-manager:
     image: ghcr.io/rajkumaar23/truenas-power-manager:latest
@@ -27,46 +28,20 @@ services:
       - wireguard
     entrypoint: ["sh", "-c", "sleep infinity"]
     restart: unless-stopped
-    # environment:
-    #   - TZ=America/New_York
-
-    #   # --- IPMI LAN credentials (reachable via WireGuard tunnel) ---
-    #   - IPMI_HOST=192.168.2.100
-    #   - IPMI_USER=ADMIN
-    #   - IPMI_PASSWORD=ADMIN
-    #   - IPMI_PRIVILEGE=ADMINISTRATOR  # ADMINISTRATOR, OPERATOR, or USER (default: ADMINISTRATOR)
-
-    #   # --- Source TrueNAS OS (replication task state is tracked here) ---
-    #   - TRUENAS_HOST=192.168.1.101
-    #   - TRUENAS_PORT=22         # default: 22
-    #   - TRUENAS_USER=root
-    #   - TRUENAS_PASSWORD=
-    #   # - TRUENAS_KEY_FILE=/secrets/truenas_id_rsa
     env_file:
       - .env
-
     # Uncomment to mount SSH keys for key-based auth:
     # volumes:
     #   - /root/.ssh/id_rsa:/secrets/truenas_id_rsa:ro
-
     labels:
+      ofelia.enabled: "true"
       # Power ON at 22:00 — boot the backup server two hours before midnight.
       ofelia.job-exec.power-on.schedule:  "0 22 * * *"
       ofelia.job-exec.power-on.command:   "/usr/local/bin/truenas-power-manager -power-on"
-
       # Power OFF check starting at 02:00 — aborts (exit 1) if backup is still running,
       # so Ofelia will retry on the next interval until the backup finishes.
       ofelia.job-exec.power-off.schedule: "0 2 * * *"
       ofelia.job-exec.power-off.command:  "/usr/local/bin/truenas-power-manager -power-off"
-
-  ofelia:
-    image: mcuadros/ofelia:latest
-    container_name: ofelia
-    restart: unless-stopped
-    depends_on:
-      - truenas-power-manager
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
 
 networks:
   lan:
