@@ -22,16 +22,7 @@ The binary exposes five commands:
 
 ## Network topology
 
-```
-source network                                    backup network
-──────────────────────────────────────────────    ──────────────────────
- source TrueNAS ◄── SSH ──┐
-                           │
-                  truenas-power-manager
-                  (macvlan on source LAN)
-                           │
-                      WireGuard tunnel ────────── IPMI ──► backup TrueNAS
-```
+![Network Topology](docs/topology.svg)
 
 The `truenas-power-manager` container sits on the source LAN via a macvlan interface. It SSHes into the source TrueNAS to check replication status, and reaches the backup network's IPMI through a WireGuard sidecar.
 
