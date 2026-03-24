@@ -44,11 +44,11 @@ services:
     labels:
       ofelia.enabled: "true"
       # Power ON at 22:00 — boot the backup server two hours before midnight.
-      ofelia.job-exec.power-on.schedule:  "0 22 * * *"
+      ofelia.job-exec.power-on.schedule:  "0 0 22 * * *"
       ofelia.job-exec.power-on.command:   "/usr/local/bin/truenas-power-manager -power-on"
-      # Power OFF check starting at 02:00 — aborts (exit 1) if backup is still running,
-      # so Ofelia will retry on the next interval until the backup finishes.
-      ofelia.job-exec.power-off.schedule: "0 2 * * *"
+      # Power OFF at 02:00 — aborts (exit 1) if backup is still running.
+      # Configure Ofelia mail labels to get alerted on failure.
+      ofelia.job-exec.power-off.schedule: "0 0 2 * * *"
       ofelia.job-exec.power-off.command:  "/usr/local/bin/truenas-power-manager -power-off"
 
 networks:

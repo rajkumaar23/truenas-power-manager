@@ -18,7 +18,7 @@ The binary exposes five commands:
 | `-status` | Prints the current IPMI chassis power state |
 | `-backup-status` | Prints whether any replication task is currently running |
 
-`-power-off` exiting with code 1 when the backup is still running is deliberate — Ofelia treats it as a failure and retries on the next interval.
+`-power-off` exiting with code 1 when the backup is still running is deliberate — it signals a failure so the scheduler can alert you and you can re-run manually once the backup finishes.
 
 ## Network topology
 
@@ -116,7 +116,7 @@ Default schedule (edit the labels in `docker-compose.yml` to change):
 
 ```
 22:00  →  -power-on
-02:00  →  -power-off  (retries each minute until the backup is done)
+02:00  →  -power-off  (exits 1 if backup still running — configure Ofelia to alert you)
 ```
 
 ### Ofelia
