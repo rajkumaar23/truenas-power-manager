@@ -1,0 +1,13 @@
+[Interface]
+# This container's WireGuard IP
+Address = 10.0.0.2/24
+PrivateKey = <your-private-key>
+
+[Peer]
+# The WireGuard peer in the backup network
+PublicKey = <peer-public-key>
+Endpoint = <peer-public-ip>:<peer-port>
+# Include the backup network subnet so traffic is routed through the tunnel.
+# Add the IPMI host's subnet here.
+AllowedIPs = 192.168.2.0/24
+PersistentKeepalive = 25
