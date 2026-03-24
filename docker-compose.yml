@@ -30,6 +30,14 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    # Alternatively, set vars inline (copy from .env.example):
+    # environment:
+    #   IPMI_HOST: 10.10.0.64
+    #   IPMI_USER: ADMIN
+    #   IPMI_PASSWORD: changeme
+    #   TRUENAS_HOST: 192.168.1.10
+    #   TRUENAS_USER: root
+    #   TRUENAS_PASSWORD: changeme
     # Uncomment to mount SSH keys for key-based auth:
     # volumes:
     #   - /root/.ssh/id_rsa:/secrets/truenas_id_rsa:ro
