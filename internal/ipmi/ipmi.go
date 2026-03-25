@@ -9,6 +9,8 @@ import (
 	"truenas-power-manager/internal/config"
 )
 
+const maxAttempts = 3
+
 // State represents the chassis power state.
 type State int
 
@@ -89,28 +91,37 @@ func (c *Controller) PowerOff() error {
 
 // run executes ipmitool as a local subprocess. Arguments are passed as a slice
 // so no shell quoting or injection is possible.
+//
+// Up to maxAttempts tries are made to handle the transient "auth type NONE not
+// supported" negotiation failure that some BMCs emit on the first connection.
 func (c *Controller) run(subcommand ...string) (string, error) {
 	args := append(
 		[]string{"-H", c.cfg.Host, "-U", c.cfg.User, "-P", c.cfg.Password, "-L", c.cfg.Privilege},
 		subcommand...,
 	)
 
-	var stdout, stderr bytes.Buffer
-	cmd := exec.Command("ipmitool", args...)
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		var stdout, stderr bytes.Buffer
+		cmd := exec.Command("ipmitool", args...)
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
 
-	err := cmd.Run()
-	out := strings.TrimSpace(stdout.String())
-	if err != nil {
+		err := cmd.Run()
+		out := strings.TrimSpace(stdout.String())
+		if err == nil {
+			return out, nil
+		}
+
 		errMsg := strings.TrimSpace(stderr.String())
 		errMsg = strings.ReplaceAll(errMsg, c.cfg.Password, "***")
 		if errMsg != "" {
-			return "", fmt.Errorf("ipmitool: %w — %s", err, errMsg)
+			lastErr = fmt.Errorf("ipmitool: %w — %s", err, errMsg)
+		} else {
+			lastErr = fmt.Errorf("ipmitool: %w", err)
 		}
-		return "", fmt.Errorf("ipmitool: %w", err)
 	}
-	return out, nil
+	return "", lastErr
 }
 
 func parseStatus(output string) State {
