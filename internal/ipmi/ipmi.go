@@ -5,16 +5,8 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
-	"time"
 
 	"truenas-power-manager/internal/config"
-)
-
-const (
-	maxAttempts    = 3
-	retryTimeout   = 30 * time.Minute
-	retryInitDelay = 2 * time.Second
-	retryMaxDelay  = 2 * time.Minute
 )
 
 // State represents the chassis power state.
@@ -65,99 +57,60 @@ func (c *Controller) Status() (State, error) {
 
 // PowerOn sends the chassis power-on command.
 // Safe to call when the server is already on.
-// Retries with exponential backoff for up to retryTimeout on failure.
 func (c *Controller) PowerOn() error {
-	return c.withRetry("power on", func() error {
-		state, err := c.Status()
-		if err != nil {
-			return err
-		}
-		if state == StateOn {
-			return nil
-		}
-		if _, err := c.run("chassis", "power", "on"); err != nil {
-			return fmt.Errorf("IPMI power on: %w", err)
-		}
+	state, err := c.Status()
+	if err != nil {
+		return err
+	}
+	if state == StateOn {
 		return nil
-	})
+	}
+	if _, err := c.run("chassis", "power", "on"); err != nil {
+		return fmt.Errorf("IPMI power on: %w", err)
+	}
+	return nil
 }
 
 // PowerOff sends a graceful ACPI shutdown.
 // Safe to call when the server is already off.
-// Retries with exponential backoff for up to retryTimeout on failure.
 func (c *Controller) PowerOff() error {
-	return c.withRetry("power off", func() error {
-		state, err := c.Status()
-		if err != nil {
-			return err
-		}
-		if state == StateOff {
-			return nil
-		}
-		if _, err := c.run("chassis", "power", "soft"); err != nil {
-			return fmt.Errorf("IPMI power off: %w", err)
-		}
-		return nil
-	})
-}
-
-// withRetry calls fn repeatedly with exponential backoff until it succeeds or
-// retryTimeout elapses. The delay starts at retryInitDelay and doubles each
-// attempt, capped at retryMaxDelay.
-func (c *Controller) withRetry(op string, fn func() error) error {
-	deadline := time.Now().Add(retryTimeout)
-	delay := retryInitDelay
-	var lastErr error
-	for attempt := 1; ; attempt++ {
-		lastErr = fn()
-		if lastErr == nil {
-			return nil
-		}
-		if time.Now().Add(delay).After(deadline) {
-			break
-		}
-		time.Sleep(delay)
-		delay *= 2
-		if delay > retryMaxDelay {
-			delay = retryMaxDelay
-		}
+	state, err := c.Status()
+	if err != nil {
+		return err
 	}
-	return fmt.Errorf("IPMI %s failed after %s: %w", op, retryTimeout, lastErr)
+	if state == StateOff {
+		return nil
+	}
+	if _, err := c.run("chassis", "power", "soft"); err != nil {
+		return fmt.Errorf("IPMI power off: %w", err)
+	}
+	return nil
 }
 
 // run executes ipmitool as a local subprocess. Arguments are passed as a slice
 // so no shell quoting or injection is possible.
-//
-// Up to maxAttempts tries are made to handle the transient "auth type NONE not
-// supported" negotiation failure that some BMCs emit on the first connection.
 func (c *Controller) run(subcommand ...string) (string, error) {
 	args := append(
-		[]string{"-H", c.cfg.Host, "-U", c.cfg.User, "-P", c.cfg.Password, "-L", c.cfg.Privilege},
+		[]string{"-I", c.cfg.Interface, "-A", c.cfg.AuthType, "-H", c.cfg.Host, "-U", c.cfg.User, "-P", c.cfg.Password, "-L", c.cfg.Privilege},
 		subcommand...,
 	)
 
-	var lastErr error
-	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		var stdout, stderr bytes.Buffer
-		cmd := exec.Command("ipmitool", args...)
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
+	var stdout, stderr bytes.Buffer
+	cmd := exec.Command("ipmitool", args...)
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
 
-		err := cmd.Run()
-		out := strings.TrimSpace(stdout.String())
-		if err == nil {
-			return out, nil
-		}
-
+	err := cmd.Run()
+	out := strings.TrimSpace(stdout.String())
+	if err != nil {
 		errMsg := strings.TrimSpace(stderr.String())
 		errMsg = strings.ReplaceAll(errMsg, c.cfg.Password, "***")
 		if errMsg != "" {
-			lastErr = fmt.Errorf("ipmitool: %w — %s", err, errMsg)
-		} else {
-			lastErr = fmt.Errorf("ipmitool: %w", err)
+			return "", fmt.Errorf("ipmitool: %w — %s", err, errMsg)
 		}
+		return "", fmt.Errorf("ipmitool: %w", err)
 	}
-	return "", lastErr
+	return out, nil
 }
 
 func parseStatus(output string) State {

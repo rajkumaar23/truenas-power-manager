@@ -18,6 +18,8 @@ type IPMIConfig struct {
 	User      string
 	Password  string
 	Privilege string // ipmitool -L: ADMINISTRATOR, OPERATOR, USER
+	Interface string // ipmitool -I: lan (IPMI v1.5, default) or lanplus (IPMI v2.0)
+	AuthType  string // ipmitool -A: NONE, PASSWORD, MD2, MD5 — forced to skip negotiation
 }
 
 type TrueNASConfig struct {
@@ -46,6 +48,8 @@ func Load() (*Config, error) {
 			User:      os.Getenv("IPMI_USER"),
 			Password:  os.Getenv("IPMI_PASSWORD"),
 			Privilege: envString("IPMI_PRIVILEGE", "ADMINISTRATOR"),
+			Interface: envString("IPMI_INTERFACE", "lan"),
+			AuthType:  envString("IPMI_AUTH_TYPE", "MD5"),
 		},
 		TrueNAS: TrueNASConfig{
 			Host:     os.Getenv("TRUENAS_HOST"),
