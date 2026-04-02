@@ -5,11 +5,17 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 
 	"truenas-power-manager/internal/config"
 )
 
-const maxAttempts = 3
+const (
+	maxAttempts    = 3
+	retryTimeout   = 30 * time.Minute
+	retryInitDelay = 2 * time.Second
+	retryMaxDelay  = 2 * time.Minute
+)
 
 // State represents the chassis power state.
 type State int
@@ -59,34 +65,64 @@ func (c *Controller) Status() (State, error) {
 
 // PowerOn sends the chassis power-on command.
 // Safe to call when the server is already on.
+// Retries with exponential backoff for up to retryTimeout on failure.
 func (c *Controller) PowerOn() error {
-	state, err := c.Status()
-	if err != nil {
-		return err
-	}
-	if state == StateOn {
+	return c.withRetry("power on", func() error {
+		state, err := c.Status()
+		if err != nil {
+			return err
+		}
+		if state == StateOn {
+			return nil
+		}
+		if _, err := c.run("chassis", "power", "on"); err != nil {
+			return fmt.Errorf("IPMI power on: %w", err)
+		}
 		return nil
-	}
-	if _, err := c.run("chassis", "power", "on"); err != nil {
-		return fmt.Errorf("IPMI power on: %w", err)
-	}
-	return nil
+	})
 }
 
 // PowerOff sends a graceful ACPI shutdown.
 // Safe to call when the server is already off.
+// Retries with exponential backoff for up to retryTimeout on failure.
 func (c *Controller) PowerOff() error {
-	state, err := c.Status()
-	if err != nil {
-		return err
-	}
-	if state == StateOff {
+	return c.withRetry("power off", func() error {
+		state, err := c.Status()
+		if err != nil {
+			return err
+		}
+		if state == StateOff {
+			return nil
+		}
+		if _, err := c.run("chassis", "power", "soft"); err != nil {
+			return fmt.Errorf("IPMI power off: %w", err)
+		}
 		return nil
+	})
+}
+
+// withRetry calls fn repeatedly with exponential backoff until it succeeds or
+// retryTimeout elapses. The delay starts at retryInitDelay and doubles each
+// attempt, capped at retryMaxDelay.
+func (c *Controller) withRetry(op string, fn func() error) error {
+	deadline := time.Now().Add(retryTimeout)
+	delay := retryInitDelay
+	var lastErr error
+	for attempt := 1; ; attempt++ {
+		lastErr = fn()
+		if lastErr == nil {
+			return nil
+		}
+		if time.Now().Add(delay).After(deadline) {
+			break
+		}
+		time.Sleep(delay)
+		delay *= 2
+		if delay > retryMaxDelay {
+			delay = retryMaxDelay
+		}
 	}
-	if _, err := c.run("chassis", "power", "soft"); err != nil {
-		return fmt.Errorf("IPMI power off: %w", err)
-	}
-	return nil
+	return fmt.Errorf("IPMI %s failed after %s: %w", op, retryTimeout, lastErr)
 }
 
 // run executes ipmitool as a local subprocess. Arguments are passed as a slice
