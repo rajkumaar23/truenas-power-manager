@@ -49,7 +49,7 @@ func Load() (*Config, error) {
 			Password:  os.Getenv("IPMI_PASSWORD"),
 			Privilege: envString("IPMI_PRIVILEGE", "ADMINISTRATOR"),
 			Interface: envString("IPMI_INTERFACE", "lan"),
-			AuthType:  envString("IPMI_AUTH_TYPE", "MD5"),
+			AuthType:  envString("IPMI_AUTH_TYPE", "PASSWORD"),
 		},
 		TrueNAS: TrueNASConfig{
 			Host:     os.Getenv("TRUENAS_HOST"),
