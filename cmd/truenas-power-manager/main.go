@@ -72,7 +72,7 @@ func main() {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Println("Power-on command sent.")
+		fmt.Println("Power on: system is ON.")
 
 	case *powerOff:
 		running, err := checker.IsBackupRunning()
@@ -88,13 +88,13 @@ func main() {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Println("Power-off command sent.")
+		fmt.Println("Power off: system is OFF.")
 
 	case *forceOff:
 		if err := ctrl.PowerOff(); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Println("Power-off command sent (forced).")
+		fmt.Println("Power off (forced): system is OFF.")
 	}
 }

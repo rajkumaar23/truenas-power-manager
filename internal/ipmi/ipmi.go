@@ -11,8 +11,11 @@ import (
 )
 
 const (
-	maxAttempts     = 3
-	retryDelay      = 60 * time.Second
+	maxAttempts      = 3
+	retryDelay       = 60 * time.Second
+	pollInterval     = 10 * time.Second
+	stateTimeout     = 10 * time.Minute
+	maxStateAttempts = 3
 )
 
 // State represents the chassis power state.
@@ -61,7 +64,8 @@ func (c *Controller) Status() (State, error) {
 	return parseStatus(out), nil
 }
 
-// PowerOn sends the chassis power-on command.
+// PowerOn sends the chassis power-on command and waits until the system is ON.
+// Retries the command up to maxStateAttempts times if the state isn't reached.
 // Safe to call when the server is already on.
 func (c *Controller) PowerOn() error {
 	state, err := c.Status()
@@ -71,13 +75,20 @@ func (c *Controller) PowerOn() error {
 	if state == StateOn {
 		return nil
 	}
-	if _, err := c.run("chassis", "power", "on"); err != nil {
-		return fmt.Errorf("IPMI power on: %w", err)
+	var lastErr error
+	for attempt := 1; attempt <= maxStateAttempts; attempt++ {
+		if _, err := c.run("chassis", "power", "on"); err != nil {
+			return fmt.Errorf("IPMI power on: %w", err)
+		}
+		if lastErr = c.waitForState(StateOn); lastErr == nil {
+			return nil
+		}
 	}
-	return nil
+	return fmt.Errorf("power on failed after %d attempts: %w", maxStateAttempts, lastErr)
 }
 
-// PowerOff sends a graceful ACPI shutdown.
+// PowerOff sends a graceful ACPI shutdown and waits until the system is OFF.
+// Retries the command up to maxStateAttempts times if the state isn't reached.
 // Safe to call when the server is already off.
 func (c *Controller) PowerOff() error {
 	state, err := c.Status()
@@ -87,10 +98,33 @@ func (c *Controller) PowerOff() error {
 	if state == StateOff {
 		return nil
 	}
-	if _, err := c.run("chassis", "power", "soft"); err != nil {
-		return fmt.Errorf("IPMI power off: %w", err)
+	var lastErr error
+	for attempt := 1; attempt <= maxStateAttempts; attempt++ {
+		if _, err := c.run("chassis", "power", "soft"); err != nil {
+			return fmt.Errorf("IPMI power off: %w", err)
+		}
+		if lastErr = c.waitForState(StateOff); lastErr == nil {
+			return nil
+		}
 	}
-	return nil
+	return fmt.Errorf("power off failed after %d attempts: %w", maxStateAttempts, lastErr)
+}
+
+// waitForState polls Status every pollInterval until the chassis reaches target
+// or stateTimeout elapses.
+func (c *Controller) waitForState(target State) error {
+	deadline := time.Now().Add(stateTimeout)
+	for time.Now().Before(deadline) {
+		time.Sleep(pollInterval)
+		state, err := c.Status()
+		if err != nil {
+			return fmt.Errorf("waiting for state %s: %w", target, err)
+		}
+		if state == target {
+			return nil
+		}
+	}
+	return fmt.Errorf("timed out after %s waiting for power state %s", stateTimeout, target)
 }
 
 // run executes ipmitool as a local subprocess. Arguments are passed as a slice
